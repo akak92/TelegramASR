@@ -1,0 +1,6 @@
+fastapi==0.115.5
+uvicorn==0.32.0
+python-multipart==0.0.12
+azure-cognitiveservices-speech==1.42.0
+pydub==0.25.1
+python-dotenv==1.0.0

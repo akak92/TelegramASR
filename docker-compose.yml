@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+
+  # ──────────────────────────────────────────────
+  # MongoDB
+  # ──────────────────────────────────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: medicalASR-mongo
+    restart: unless-stopped
+    ports:
+      - "27030:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: adminpass
+      MONGO_INITDB_DATABASE: MedicalASR
+    volumes:
+      - mongo_data:/data/db
+      - ./Services/Mongo/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - medicalASR-network
+
+  # ──────────────────────────────────────────────
+  # Transcriber — Azure Speech AI (STT)
+  # ──────────────────────────────────────────────
+  transcriber:
+    build:
+      context: ./Services/Transcriber
+      dockerfile: Dockerfile
+    container_name: medicalASR-transcriber
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - AZURE_SPEECH_AI_KEY=${AZURE_SPEECH_AI_KEY}
+      - AZURE_SPEECH_AI_REGION=${AZURE_SPEECH_AI_REGION}
+      - SPEECH_LANGUAGE=es-AR
+    ports:
+      - "8001:8001"
+    networks:
+      - medicalASR-network
+
+  # ──────────────────────────────────────────────
+  # Corrector — Azure OpenAI (LLM)
+  # ──────────────────────────────────────────────
+  corrector:
+    build:
+      context: ./Services/Corrector
+      dockerfile: Dockerfile
+    container_name: medicalASR-corrector
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_VERSION=${AZURE_OPENAI_VERSION}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT}
+    ports:
+      - "8002:8002"
+    networks:
+      - medicalASR-network
+
+  # ──────────────────────────────────────────────
+  # Bot — Telegram
+  # ──────────────────────────────────────────────
+  bot:
+    build:
+      context: ./Services/Bot
+      dockerfile: Dockerfile
+    container_name: medicalASR-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TRANSCRIBER_URL=http://transcriber:8001
+      - CORRECTOR_URL=http://corrector:8002
+      - MONGO_URI=mongodb://admin:adminpass@mongo:27017/MedicalASR?authSource=admin
+      - MONGO_DB_NAME=MedicalASR
+      - MONGO_COLLECTION=transcriptions
+    depends_on:
+      - mongo
+      - transcriber
+      - corrector
+    networks:
+      - medicalASR-network
+
+volumes:
+  mongo_data:
+
+networks:
+  medicalASR-network:
+    driver: bridge
